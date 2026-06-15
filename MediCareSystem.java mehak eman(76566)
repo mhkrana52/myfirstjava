@@ -1,0 +1,620 @@
+package medicaresystem;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+// Interface 1: Auth - Requirement
+interface AuthOperations {
+    boolean login(String user, String pass); // Line 1
+    void register(String user, String pass); // Line 2
+}
+
+// Interface 2: Patient - Requirement  
+interface PatientOperations {
+    void addPatient(); // Line 3
+    void dischargePatient(); // Line 4
+    void searchPatient(String id); // Line 5
+    void showMedicines(); // Line 6
+    void showCheckout(); // Line 7
+}
+
+// Interface 3: File + Cart - Requirement
+interface FileOperations {
+    void saveData(); // Line 8
+    void loadData(); // Line 9
+    void generateSlip(); // Line 10
+    void addToCart(); // Line 11
+    void removeFromCart(); // Line 12
+    void clearCart(); // Line 13
+}
+
+// Abstract Class: Abstraction + Encapsulation - Requirement
+abstract class Person implements Serializable {
+    private static final long serialVersionUID = 1L;
+    protected String name;
+    public abstract String getDetails();
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+}
+
+// Concrete Class: Inheritance + Polymorphism + Encapsulation - Requirement
+class Patient extends Person {
+    private String id, disease, doctor, bill;
+
+    public Patient(String id, String name, String disease, String doctor, String bill) {
+        this.setName(name);
+        this.id = id; this.disease = disease;
+        this.doctor = doctor; this.bill = bill;
+    }
+
+    @Override // Polymorphism
+    public String getDetails() { return "ID: " + id + " - Name: " + getName(); }
+
+    public String getId() { return id; }
+    public String getDisease() { return disease; }
+    public String getDoctor() { return doctor; }
+    public String getBill() { return bill; }
+}
+
+public class MediCareSystem extends JFrame implements AuthOperations, PatientOperations, FileOperations {
+
+    // Sirf 2 Colors: Teal + Light Gray - Requirement
+    private final Color PRIMARY = new Color(0, 150, 136);
+    private final Color BG = new Color(245, 245, 245);
+
+    private CardLayout cardLayout;
+    private JPanel mainPanel;
+    private DefaultTableModel patientModel, medicineModel, cartModel;
+    private JTable patientTable, medicineTable, cartTable;
+    private JTextField idField, nameField, diseaseField, doctorField, billField, searchField;
+    private JTextField checkoutName, checkoutEmail, checkoutContact, checkoutAddress;
+    private JTextArea slipArea;
+    private JLabel cartTotalLabel;
+    private String selectedPatientId = "";
+
+    public MediCareSystem() {
+        setTitle("MediCare - Hospital Patient Record System");
+        setSize(1100, 700);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+
+        cardLayout = new CardLayout();
+        mainPanel = new JPanel(cardLayout);
+
+        mainPanel.add(createLoginPanel(), "LOGIN");
+        mainPanel.add(createPatientListPanel(), "PATIENTS"); // Screen 2
+        mainPanel.add(createMedicinesPanel(), "MEDICINES"); // Screen 3
+        mainPanel.add(createCheckoutPanel(), "CHECKOUT"); // Screen 4
+        mainPanel.add(createSlipPanel(), "SLIP"); // Screen 5
+
+        add(mainPanel);
+        cardLayout.show(mainPanel, "LOGIN");
+        setVisible(true);
+    }
+
+    // SCREEN 1: LOGIN - AzaDen Login Jesa
+    private JPanel createLoginPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBackground(PRIMARY);
+
+        JPanel loginBox = new JPanel();
+        loginBox.setLayout(new BoxLayout(loginBox, BoxLayout.Y_AXIS));
+        loginBox.setBackground(Color.WHITE);
+        loginBox.setBorder(BorderFactory.createEmptyBorder(40, 50, 40, 50));
+
+        JLabel title = new JLabel("Welcome to MediCare");
+        title.setFont(new Font("Arial", Font.BOLD, 24));
+        title.setForeground(PRIMARY);
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JTextField userField = new JTextField(15);
+        userField.setMaximumSize(new Dimension(250, 30));
+        JPasswordField passField = new JPasswordField(15);
+        passField.setMaximumSize(new Dimension(250, 30));
+
+        JPanel btnPanel = new JPanel(new FlowLayout());
+        btnPanel.setBackground(Color.WHITE);
+        JButton loginBtn = new JButton("Login");
+        JButton regBtn = new JButton("Register");
+
+        for(JButton b : new JButton[]{loginBtn, regBtn}) {
+            b.setBackground(PRIMARY);
+            b.setForeground(Color.WHITE);
+            b.setFont(new Font("Arial", Font.BOLD, 14));
+            b.setFocusPainted(false);
+            b.setBorderPainted(false);
+            b.setPreferredSize(new Dimension(100, 35));
+        }
+
+        // Event Handling - Requirement
+        loginBtn.addActionListener(e -> {
+            if(login(userField.getText(), new String(passField.getPassword()))) {
+                cardLayout.show(mainPanel, "PATIENTS");
+                loadData();
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid Username/Password!");
+            }
+        });
+
+        regBtn.addActionListener(e -> register(userField.getText(), new String(passField.getPassword())));
+
+        loginBox.add(title);
+        loginBox.add(Box.createRigidArea(new Dimension(0, 20)));
+        loginBox.add(new JLabel("Username:"));
+        loginBox.add(userField);
+        loginBox.add(Box.createRigidArea(new Dimension(0, 10)));
+        loginBox.add(new JLabel("Password:"));
+        loginBox.add(passField);
+        loginBox.add(Box.createRigidArea(new Dimension(0, 20)));
+        btnPanel.add(loginBtn);
+        btnPanel.add(regBtn);
+        loginBox.add(btnPanel);
+
+        panel.add(loginBox);
+        return panel;
+    }
+
+    // SCREEN 2: PATIENT LIST - AzaDen Products Table Jesa
+    private JPanel createPatientListPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setBackground(PRIMARY);
+        topBar.setPreferredSize(new Dimension(0, 50));
+
+        JLabel title = new JLabel(" Patient Records");
+        title.setFont(new Font("Arial", Font.BOLD, 20));
+        title.setForeground(Color.WHITE);
+
+        JButton logoutBtn = new JButton("Logout");
+        logoutBtn.setBackground(Color.WHITE);
+        logoutBtn.setForeground(PRIMARY);
+        logoutBtn.setFocusPainted(false);
+        logoutBtn.addActionListener(e -> cardLayout.show(mainPanel, "LOGIN"));
+
+        topBar.add(title, BorderLayout.WEST);
+        topBar.add(logoutBtn, BorderLayout.EAST);
+        panel.add(topBar, BorderLayout.NORTH);
+
+        JPanel form = new JPanel(new GridLayout(6, 2, 10, 10));
+        form.setBackground(BG);
+        form.setBorder(BorderFactory.createTitledBorder("Admit Patient"));
+
+        idField = new JTextField(); nameField = new JTextField();
+        diseaseField = new JTextField(); doctorField = new JTextField();
+        billField = new JTextField(); searchField = new JTextField();
+
+        form.add(new JLabel("Patient ID:")); form.add(idField);
+        form.add(new JLabel("Name:")); form.add(nameField);
+        form.add(new JLabel("Disease:")); form.add(diseaseField);
+        form.add(new JLabel("Doctor:")); form.add(doctorField);
+        form.add(new JLabel("Bill:")); form.add(billField);
+        form.add(new JLabel("Search ID:")); form.add(searchField);
+
+        panel.add(form, BorderLayout.WEST);
+
+        patientModel = new DefaultTableModel(new String[]{"ID", "Name", "Disease", "Doctor", "Bill"}, 0);
+        patientTable = new JTable(patientModel);
+        patientTable.setRowHeight(25);
+        patientTable.getTableHeader().setBackground(PRIMARY);
+        patientTable.getTableHeader().setForeground(Color.WHITE);
+        panel.add(new JScrollPane(patientTable), BorderLayout.CENTER);
+
+        JPanel btnPanel = new JPanel(new GridLayout(1, 7, 5, 5));
+        btnPanel.setBackground(BG);
+
+        JButton addBtn = new JButton("Admit");
+        JButton disBtn = new JButton("Discharge");
+        JButton searchBtn = new JButton("Search");
+        JButton medBtn = new JButton("Medicines");
+        JButton saveBtn = new JButton("Save");
+        JButton loadBtn = new JButton("Load");
+        JButton checkoutBtn = new JButton("Checkout");
+
+        for(JButton b : new JButton[]{addBtn, disBtn, searchBtn, medBtn, saveBtn, loadBtn, checkoutBtn}) {
+            b.setBackground(PRIMARY);
+            b.setForeground(Color.WHITE);
+            b.setFont(new Font("Arial", Font.BOLD, 11));
+            b.setFocusPainted(false);
+            b.setBorderPainted(false);
+            btnPanel.add(b);
+        }
+
+        // Event Handling - Requirement
+        addBtn.addActionListener(e -> addPatient());
+        disBtn.addActionListener(e -> dischargePatient());
+        searchBtn.addActionListener(e -> searchPatient(searchField.getText()));
+        medBtn.addActionListener(e -> showMedicines());
+        saveBtn.addActionListener(e -> saveData());
+        loadBtn.addActionListener(e -> loadData());
+        checkoutBtn.addActionListener(e -> {
+            int row = patientTable.getSelectedRow();
+            if(row >= 0) {
+                selectedPatientId = patientModel.getValueAt(row, 0).toString();
+                showCheckout();
+            } else JOptionPane.showMessageDialog(this, "Select patient first!");
+        });
+
+        panel.add(btnPanel, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    // SCREEN 3: MEDICINES - AzaDen Cart Jesa
+    private JPanel createMedicinesPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setBackground(PRIMARY);
+        topBar.setPreferredSize(new Dimension(0, 50));
+
+        JLabel title = new JLabel(" Medicines Cart");
+        title.setFont(new Font("Arial", Font.BOLD, 20));
+        title.setForeground(Color.WHITE);
+
+        JButton backBtn = new JButton("Back to Patients");
+        backBtn.setBackground(Color.WHITE);
+        backBtn.setForeground(PRIMARY);
+        backBtn.setFocusPainted(false);
+        backBtn.addActionListener(e -> cardLayout.show(mainPanel, "PATIENTS"));
+
+        topBar.add(title, BorderLayout.WEST);
+        topBar.add(backBtn, BorderLayout.EAST);
+        panel.add(topBar, BorderLayout.NORTH);
+
+        // Medicine List - AzaDen Products jesi
+        medicineModel = new DefaultTableModel(new String[]{"Medicine", "Price", "Stock"}, 0);
+        medicineTable = new JTable(medicineModel);
+        medicineTable.setRowHeight(30);
+        medicineTable.getTableHeader().setBackground(PRIMARY);
+        medicineTable.getTableHeader().setForeground(Color.WHITE);
+        
+        medicineModel.addRow(new Object[]{"Paracetamol", 50.0, 100});
+        medicineModel.addRow(new Object[]{"Antibiotic", 200.0, 50});
+        medicineModel.addRow(new Object[]{"Painkiller", 150.0, 80});
+        medicineModel.addRow(new Object[]{"Vitamin C", 100.0, 120});
+        medicineModel.addRow(new Object[]{"Cough Syrup", 120.0, 60});
+        medicineModel.addRow(new Object[]{"Injection", 500.0, 30});
+        medicineModel.addRow(new Object[]{"Drip", 800.0, 25});
+        medicineModel.addRow(new Object[]{"Bandage", 80.0, 200});
+
+        JPanel leftPanel = new JPanel(new BorderLayout());
+        leftPanel.setBackground(BG);
+        leftPanel.setBorder(BorderFactory.createTitledBorder("Available Medicines"));
+        leftPanel.add(new JScrollPane(medicineTable), BorderLayout.CENTER);
+
+        JButton addCartBtn = new JButton("Add to Cart");
+        addCartBtn.setBackground(PRIMARY);
+        addCartBtn.setForeground(Color.WHITE);
+        addCartBtn.setFocusPainted(false);
+        addCartBtn.addActionListener(e -> addToCart());
+        leftPanel.add(addCartBtn, BorderLayout.SOUTH);
+
+        panel.add(leftPanel, BorderLayout.WEST);
+
+        // Cart - AzaDen Cart jesa
+        cartModel = new DefaultTableModel(new String[]{"Medicine", "Price", "Qty", "Total"}, 0);
+        cartTable = new JTable(cartModel);
+        cartTable.setRowHeight(25);
+        cartTable.getTableHeader().setBackground(PRIMARY);
+        cartTable.getTableHeader().setForeground(Color.WHITE);
+
+        JPanel rightPanel = new JPanel(new BorderLayout());
+        rightPanel.setBackground(BG);
+        rightPanel.setBorder(BorderFactory.createTitledBorder("Cart"));
+        rightPanel.add(new JScrollPane(cartTable), BorderLayout.CENTER);
+
+        JPanel cartBtnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        cartBtnPanel.setBackground(BG);
+
+        JButton removeBtn = new JButton("Remove");
+        JButton clearBtn = new JButton("Clear Cart");
+        cartTotalLabel = new JLabel("Total: 0.00");
+
+        for(JButton b : new JButton[]{removeBtn, clearBtn}) {
+            b.setBackground(PRIMARY);
+            b.setForeground(Color.WHITE);
+            b.setFocusPainted(false);
+            b.setBorderPainted(false);
+        }
+
+        removeBtn.addActionListener(e -> removeFromCart());
+        clearBtn.addActionListener(e -> clearCart());
+
+        cartBtnPanel.add(removeBtn);
+        cartBtnPanel.add(clearBtn);
+        cartBtnPanel.add(cartTotalLabel);
+
+        rightPanel.add(cartBtnPanel, BorderLayout.SOUTH);
+        panel.add(rightPanel, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    // SCREEN 4: CHECKOUT - AzaDen Checkout Jesa
+    private JPanel createCheckoutPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBackground(PRIMARY);
+
+        JPanel checkoutBox = new JPanel();
+        checkoutBox.setLayout(new BoxLayout(checkoutBox, BoxLayout.Y_AXIS));
+        checkoutBox.setBackground(Color.WHITE);
+        checkoutBox.setBorder(BorderFactory.createEmptyBorder(40, 50, 40, 50));
+
+        JLabel title = new JLabel("Checkout");
+        title.setFont(new Font("Arial", Font.BOLD, 24));
+        title.setForeground(PRIMARY);
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        checkoutName = new JTextField(15);
+        checkoutName.setMaximumSize(new Dimension(250, 30));
+        checkoutEmail = new JTextField(15);
+        checkoutEmail.setMaximumSize(new Dimension(250, 30));
+        checkoutContact = new JTextField(15);
+        checkoutContact.setMaximumSize(new Dimension(250, 30));
+        checkoutAddress = new JTextField(15);
+        checkoutAddress.setMaximumSize(new Dimension(250, 30));
+
+        JButton placeOrderBtn = new JButton("Place Order");
+        placeOrderBtn.setBackground(PRIMARY);
+        placeOrderBtn.setForeground(Color.WHITE);
+        placeOrderBtn.setFont(new Font("Arial", Font.BOLD, 14));
+        placeOrderBtn.setFocusPainted(false);
+        placeOrderBtn.setBorderPainted(false);
+        placeOrderBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        placeOrderBtn.setMaximumSize(new Dimension(250, 35));
+        placeOrderBtn.addActionListener(e -> generateSlip());
+
+        checkoutBox.add(title);
+        checkoutBox.add(Box.createRigidArea(new Dimension(0, 20)));
+        checkoutBox.add(new JLabel("Name:"));
+        checkoutBox.add(checkoutName);
+        checkoutBox.add(Box.createRigidArea(new Dimension(0, 10)));
+        checkoutBox.add(new JLabel("Email:"));
+        checkoutBox.add(checkoutEmail);
+        checkoutBox.add(Box.createRigidArea(new Dimension(0, 10)));
+        checkoutBox.add(new JLabel("Contact No:"));
+        checkoutBox.add(checkoutContact);
+        checkoutBox.add(Box.createRigidArea(new Dimension(0, 10)));
+        checkoutBox.add(new JLabel("Address:"));
+        checkoutBox.add(checkoutAddress);
+        checkoutBox.add(Box.createRigidArea(new Dimension(0, 20)));
+        checkoutBox.add(placeOrderBtn);
+
+        panel.add(checkoutBox);
+        return panel;
+    }
+
+    // SCREEN 5: DISCHARGE SLIP - Final
+    private JPanel createSlipPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setBackground(PRIMARY);
+        topBar.setPreferredSize(new Dimension(0, 50));
+
+        JLabel title = new JLabel(" Discharge Slip");
+        title.setFont(new Font("Arial", Font.BOLD, 20));
+        title.setForeground(Color.WHITE);
+
+        JButton backBtn = new JButton("Back to Patients");
+        backBtn.setBackground(Color.WHITE);
+        backBtn.setForeground(PRIMARY);
+        backBtn.setFocusPainted(false);
+        backBtn.addActionListener(e -> cardLayout.show(mainPanel, "PATIENTS"));
+
+        topBar.add(title, BorderLayout.WEST);
+        topBar.add(backBtn, BorderLayout.EAST);
+        panel.add(topBar, BorderLayout.NORTH);
+
+        slipArea = new JTextArea();
+        slipArea.setEditable(false);
+        slipArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        slipArea.setBackground(Color.WHITE);
+        panel.add(new JScrollPane(slipArea), BorderLayout.CENTER);
+
+        JButton printBtn = new JButton("Print Slip");
+        printBtn.setBackground(PRIMARY);
+        printBtn.setForeground(Color.WHITE);
+        printBtn.setFont(new Font("Arial", Font.BOLD, 14));
+        printBtn.addActionListener(e -> JOptionPane.showMessageDialog(this, "Slip Printed Successfully!"));
+
+        JPanel bottom = new JPanel();
+        bottom.setBackground(BG);
+        bottom.add(printBtn);
+        panel.add(bottom, BorderLayout.SOUTH);
+
+        return panel;
+    }
+
+    // Interface 1 Implementation
+    @Override
+    public boolean login(String user, String pass) {
+        return user.equals("admin") && pass.equals("1234");
+    }
+
+    @Override
+    public void register(String user, String pass) {
+        JOptionPane.showMessageDialog(this, "Registered! Use admin/1234 to login");
+    }
+
+    // Interface 2 Implementation
+    @Override
+    public void addPatient() {
+        if(idField.getText().trim().isEmpty() || nameField.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "ID and Name required!");
+            return;
+        }
+        patientModel.addRow(new Object[]{idField.getText(), nameField.getText(),
+                diseaseField.getText(), doctorField.getText(), billField.getText()});
+        clearFields();
+    }
+
+    @Override
+    public void dischargePatient() {
+        int row = patientTable.getSelectedRow();
+        if(row >= 0) {
+            selectedPatientId = patientModel.getValueAt(row, 0).toString();
+            showCheckout();
+        } else JOptionPane.showMessageDialog(this, "Select patient to discharge!");
+    }
+
+    @Override
+    public void searchPatient(String id) {
+        for(int i = 0; i < patientModel.getRowCount(); i++) {
+            if(patientModel.getValueAt(i, 0).toString().equals(id)) {
+                patientTable.setRowSelectionInterval(i, i);
+                JOptionPane.showMessageDialog(this, "Patient Found!");
+                return;
+            }
+        }
+        JOptionPane.showMessageDialog(this, "Not Found!");
+    }
+
+    @Override
+    public void showMedicines() {
+        cardLayout.show(mainPanel, "MEDICINES");
+    }
+
+    @Override
+    public void showCheckout() {
+        cardLayout.show(mainPanel, "CHECKOUT");
+    }
+
+    // Interface 3 Implementation - File Handling + Cart - Requirement
+    @Override
+    public void addToCart() {
+        int row = medicineTable.getSelectedRow();
+        if(row >= 0) {
+            String med = medicineModel.getValueAt(row, 0).toString();
+            double price = Double.parseDouble(medicineModel.getValueAt(row, 1).toString());
+            int qty = 1;
+            double total = price * qty;
+            cartModel.addRow(new Object[]{med, price, qty, total});
+            updateCartTotal();
+            JOptionPane.showMessageDialog(this, "Added to Cart!");
+        } else {
+            JOptionPane.showMessageDialog(this, "Select medicine first!");
+        }
+    }
+
+    @Override
+    public void removeFromCart() {
+        int row = cartTable.getSelectedRow();
+        if(row >= 0) {
+            cartModel.removeRow(row);
+            updateCartTotal();
+        }
+    }
+
+    @Override
+    public void clearCart() {
+        cartModel.setRowCount(0);
+        updateCartTotal();
+    }
+
+    @Override
+    public void saveData() {
+        try(ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("patients.dat"))) {
+            for(int i = 0; i < patientModel.getRowCount(); i++) {
+                Patient p = new Patient(patientModel.getValueAt(i,0).toString(), patientModel.getValueAt(i,1).toString(),
+                        patientModel.getValueAt(i,2).toString(), patientModel.getValueAt(i,3).toString(), patientModel.getValueAt(i,4).toString());
+                out.writeObject(p);
+            }
+            JOptionPane.showMessageDialog(this, "Data Saved Successfully!");
+        } catch(Exception ex) { ex.printStackTrace(); }
+    }
+
+    @Override
+    public void loadData() {
+        File file = new File("patients.dat");
+        if(!file.exists()) return;
+        try(ObjectInputStream in = new ObjectInputStream(new FileInputStream(file))) {
+            patientModel.setRowCount(0);
+            while(true) {
+                Patient p = (Patient) in.readObject();
+                patientModel.addRow(new Object[]{p.getId(), p.getName(), p.getDisease(), p.getDoctor(), p.getBill()});
+            }
+        } catch(EOFException ex) {
+            JOptionPane.showMessageDialog(this, "Data Loaded Successfully!");
+        } catch(Exception ex) { ex.printStackTrace(); }
+    }
+
+    @Override
+    public void generateSlip() {
+        if(selectedPatientId.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No patient selected!");
+            return;
+        }
+        
+        for(int i = 0; i < patientModel.getRowCount(); i++) {
+            if(patientModel.getValueAt(i, 0).toString().equals(selectedPatientId)) {
+                String slip = "=================================\n";
+                slip += " MEDICARE HOSPITAL\n";
+                slip += " DISCHARGE SLIP\n";
+                slip += "=================================\n";
+                slip += "Date: " + new SimpleDateFormat("dd-MM-yyyy HH:mm").format(new Date()) + "\n\n";
+                slip += "Patient ID: " + patientModel.getValueAt(i, 0) + "\n";
+                slip += "Name: " + patientModel.getValueAt(i, 1) + "\n";
+                slip += "Disease: " + patientModel.getValueAt(i, 2) + "\n";
+                slip += "Doctor: " + patientModel.getValueAt(i, 3) + "\n";
+                slip += "---------------------------------\n";
+                slip += "Treatment Bill: Rs. " + patientModel.getValueAt(i, 4) + "\n";
+                slip += "Medicine Bill: Rs. " + getCartTotal() + "\n";
+                slip += "---------------------------------\n";
+                slip += "Grand Total: Rs. " + (Double.parseDouble(patientModel.getValueAt(i, 4).toString()) + getCartTotal()) + "\n\n";
+                slip += "Customer Details:\n";
+                slip += "Name: " + checkoutName.getText() + "\n";
+                slip += "Email: " + checkoutEmail.getText() + "\n";
+                slip += "Contact: " + checkoutContact.getText() + "\n";
+                slip += "Address: " + checkoutAddress.getText() + "\n";
+                slip += "=================================\n";
+                slip += " Thank You! Get Well Soon\n";
+                slip += "=================================";
+                
+                slipArea.setText(slip);
+                cardLayout.show(mainPanel, "SLIP");
+                
+                // Discharge patient after slip
+                patientModel.removeRow(i);
+                clearCart();
+                selectedPatientId = "";
+                return;
+            }
+        }
+    }
+
+    private void updateCartTotal() {
+        double total = 0;
+        for(int i = 0; i < cartModel.getRowCount(); i++) {
+            total += Double.parseDouble(cartModel.getValueAt(i, 3).toString());
+        }
+        cartTotalLabel.setText("Total: " + total);
+    }
+
+    private double getCartTotal() {
+        double total = 0;
+        for(int i = 0; i < cartModel.getRowCount(); i++) {
+            total += Double.parseDouble(cartModel.getValueAt(i, 3).toString());
+        }
+        return total;
+    }
+
+    private void clearFields() {
+        idField.setText(""); nameField.setText(""); diseaseField.setText("");
+        doctorField.setText(""); billField.setText("");
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new MediCareSystem());
+    }
+}
